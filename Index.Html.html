@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Escaneo de Inventario · Lote / SSCC</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg: #14171a;
+    --panel: #1c2024;
+    --panel-2: #23282d;
+    --line: #33393f;
+    --text: #eef1f3;
+    --text-dim: #9aa4ad;
+    --lote: #ffc72c;
+    --sscc: #4fb0ff;
+    --sku: #b285ff;
+    --bad: #ff5d5d;
+    --good: #3ddc84;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    padding-bottom: 40px;
+  }
+  header{
+    padding: 18px 16px 14px;
+    border-bottom: 1px solid var(--line);
+    position: sticky; top:0; z-index:20;
+    background: var(--bg);
+  }
+  .eyebrow{
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  h1{
+    margin:0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+  }
+  .counters{
+    display:flex;
+    flex-wrap: wrap;
+    gap:10px;
+    margin-top:14px;
+  }
+  .counter{
+    flex: 1 1 calc(50% - 5px);
+    min-width: 90px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .counter .num{
+    font-family: var(--mono);
+    font-size: 24px;
+    font-weight: 700;
+    line-height:1;
+  }
+  .counter.lote .num{color:var(--lote);}
+  .counter.sscc .num{color:var(--sscc);}
+  .counter.sku .num{color:var(--sku);}
+  .counter .lbl{
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-top:4px;
+  }
+
+  main{ padding: 16px; max-width: 720px; margin: 0 auto; }
+
+  .card{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .card h2{
+    margin:0 0 12px;
+    font-size: 13px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+
+  #reader{
+    width: 100%;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    background: #000;
+  }
+  #reader video{ border-radius: 10px; }
+
+  .btn{
+    appearance:none;
+    border: none;
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: var(--sans);
+    cursor:pointer;
+    width:100%;
+  }
+  .btn-primary{ background: var(--lote); color:#1a1500; }
+  .btn-primary:active{ transform: scale(0.98); }
+  .btn-stop{ background: var(--panel-2); color: var(--bad); border: 1px solid var(--bad); }
+  .btn-secondary{ background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+  .btn-danger{ background: var(--panel-2); color: var(--bad); border: 1px solid #4a2323; }
+  .btn-row{ display:flex; gap:10px; margin-top:10px; }
+  .btn-row .btn{ width:auto; flex:1; }
+
+  .manual-row{ display:flex; gap:8px; }
+  .manual-row input{
+    flex:1;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 15px;
+  }
+  .manual-row input:focus{ outline: 2px solid var(--sscc); outline-offset:1px; }
+  .manual-row button{
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--text);
+    padding: 0 18px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .list-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:10px;
+  }
+  .list-head h2{ margin:0; }
+
+  table{ width:100%; border-collapse: collapse; }
+  thead th{
+    text-align:left;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  tbody td{
+    padding: 10px 8px;
+    border-bottom: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 14px;
+    vertical-align: middle;
+  }
+  tbody tr:last-child td{ border-bottom:none; }
+  .tag{
+    display:inline-block;
+    font-family: var(--sans);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 3px 8px;
+    border-radius: 999px;
+  }
+  .tag.lote{ background: rgba(255,199,44,0.15); color: var(--lote); }
+  .tag.sscc{ background: rgba(79,176,255,0.15); color: var(--sscc); }
+  .tag.sku{ background: rgba(178,133,255,0.15); color: var(--sku); }
+  .tag.dup{ background: rgba(255,93,93,0.15); color: var(--bad); }
+  .tag.unk{ background: rgba(154,164,173,0.15); color: var(--text-dim); }
+  .del-btn{
+    background:none; border:none; color: var(--text-dim);
+    font-size: 18px; cursor:pointer; padding: 4px 8px;
+  }
+  .del-btn:hover{ color: var(--bad); }
+  .empty{
+    text-align:center;
+    color: var(--text-dim);
+    padding: 30px 10px;
+    font-size: 13px;
+  }
+  .status{
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 10px;
+    min-height: 16px;
+  }
+  .status.ok{ color: var(--good); }
+  .status.err{ color: var(--bad); }
+  footer{
+    text-align:center;
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 20px;
+    font-family: var(--mono);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">CÁMARA · CÓDIGO DE BARRAS</div>
+  <h1>Escaneo de Inventario</h1>
+  <div class="counters">
+    <div class="counter lote">
+      <div class="num" id="countLote">0</div>
+      <div class="lbl">Lotes (8 díg.)</div>
+    </div>
+    <div class="counter sku">
+      <div class="num" id="countSku">0</div>
+      <div class="lbl">SKU (10 díg.)</div>
+    </div>
+    <div class="counter sscc">
+      <div class="num" id="countSscc">0</div>
+      <div class="lbl">SSCC (18 car.)</div>
+    </div>
+    <div class="counter">
+      <div class="num" id="countTotal">0</div>
+      <div class="lbl">Total</div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <div class="card">
+    <h2>Escanear con cámara</h2>
+    <div id="reader"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="startBtn">Iniciar cámara</button>
+      <button class="btn btn-stop" id="stopBtn" style="display:none;">Detener</button>
+    </div>
+    <div class="status" id="camStatus">Presiona "Iniciar cámara" y apunta al código.</div>
+  </div>
+
+  <div class="card">
+    <h2>Agregar manualmente</h2>
+    <div class="manual-row">
+      <input type="text" id="manualInput" placeholder="Escribe o pega el código" inputmode="text" autocomplete="off">
+      <button id="manualAdd">Agregar</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="list-head">
+      <h2>Registros de esta sesión</h2>
+      <button class="del-btn" id="clearAll" title="Borrar todo" style="font-size:12px;">Borrar todo</button>
+    </div>
+    <table id="scanTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Código</th>
+          <th>Tipo</th>
+          <th>Hora</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="scanBody">
+      </tbody>
+    </table>
+    <div class="empty" id="emptyMsg">Todavía no hay códigos escaneados.</div>
+  </div>
+
+  <button class="btn btn-secondary" id="exportBtn">Descargar Excel (.xlsx)</button>
+
+</main>
+
+<footer>Los datos se guardan solo en este dispositivo hasta que los exportes o los borres.</footer>
+
+<script>
+(function(){
+  var scans = [];
+  var seen = {};
+  var html5QrCode = null;
+  var scanning = false;
+
+  var scanBody = document.getElementById('scanBody');
+  var emptyMsg = document.getElementById('emptyMsg');
+  var countLote = document.getElementById('countLote');
+  var countSku = document.getElementById('countSku');
+  var countSscc = document.getElementById('countSscc');
+  var countTotal = document.getElementById('countTotal');
+  var camStatus = document.getElementById('camStatus');
+
+  function classify(raw){
+    var code = (raw || '').trim();
+    if(/^\d{8}$/.test(code)) return 'lote';
+    if(/^\d{10}$/.test(code)) return 'sku';
+    if(/^[A-Za-z0-9]{18}$/.test(code)) return 'sscc';
+    return 'unk';
+  }
+
+  function typeLabel(t){
+    if(t==='lote') return 'Lote';
+    if(t==='sku') return 'SKU';
+    if(t==='sscc') return 'SSCC';
+    return 'Revisar';
+  }
+
+  function beep(){
+    try{
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator();
+      var gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.1);
+    }catch(e){}
+    if(navigator.vibrate) navigator.vibrate(60);
+  }
+
+  async function loadStored(){
+    try{
+      var res = await window.storage.get('scans-session', false);
+      if(res && res.value){
+        var parsed = JSON.parse(res.value);
+        if(Array.isArray(parsed)){
+          scans = parsed;
+          scans.forEach(function(s){ seen[s.code] = (seen[s.code]||0)+1; });
+        }
+      }
+    }catch(e){ /* no hay datos guardados aún */ }
+    render();
+  }
+
+  async function persist(){
+    try{ await window.storage.set('scans-session', JSON.stringify(scans), false); }
+    catch(e){ console.error('No se pudo guardar', e); }
+  }
+
+  function addCode(raw, source){
+    var code = (raw || '').trim();
+    if(!code) return;
+    var type = classify(code);
+    var isDup = !!seen[code];
+    seen[code] = (seen[code]||0) + 1;
+
+    var entry = {
+      code: code,
+      type: type,
+      dup: isDup,
+      time: new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit', second:'2-digit'})
+    };
+    scans.unshift(entry);
+    beep();
+    render();
+    persist();
+  }
+
+  function removeAt(idx){
+    var entry = scans[idx];
+    if(entry){
+      seen[entry.code] = Math.max(0, (seen[entry.code]||1) - 1);
+    }
+    scans.splice(idx, 1);
+    render();
+    persist();
+  }
+
+  function render(){
+    scanBody.innerHTML = '';
+    emptyMsg.style.display = scans.length ? 'none' : 'block';
+
+    var lote = 0, sku = 0, sscc = 0;
+    scans.forEach(function(s){
+      if(s.type==='lote') lote++;
+      if(s.type==='sku') sku++;
+      if(s.type==='sscc') sscc++;
+    });
+    countLote.textContent = lote;
+    countSku.textContent = sku;
+    countSscc.textContent = sscc;
+    countTotal.textContent = scans.length;
+
+    scans.forEach(function(s, i){
+      var tr = document.createElement('tr');
+
+      var tdNum = document.createElement('td');
+      tdNum.textContent = scans.length - i;
+      tr.appendChild(tdNum);
+
+      var tdCode = document.createElement('td');
+      tdCode.textContent = s.code;
+      tr.appendChild(tdCode);
+
+      var tdType = document.createElement('td');
+      var tag = document.createElement('span');
+      tag.className = 'tag ' + (s.dup ? 'dup' : s.type);
+      tag.textContent = s.dup ? 'Duplicado' : typeLabel(s.type);
+      tdType.appendChild(tag);
+      tr.appendChild(tdType);
+
+      var tdTime = document.createElement('td');
+      tdTime.textContent = s.time;
+      tr.appendChild(tdTime);
+
+      var tdDel = document.createElement('td');
+      var delBtn = document.createElement('button');
+      delBtn.className = 'del-btn';
+      delBtn.textContent = '✕';
+      delBtn.onclick = (function(idx){ return function(){ removeAt(idx); }; })(i);
+      tdDel.appendChild(delBtn);
+      tr.appendChild(tdDel);
+
+      scanBody.appendChild(tr);
+    });
+  }
+
+  // Manual add
+  document.getElementById('manualAdd').onclick = function(){
+    var input = document.getElementById('manualInput');
+    addCode(input.value, 'manual');
+    input.value = '';
+    input.focus();
+  };
+  document.getElementById('manualInput').addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){
+      addCode(this.value, 'manual');
+      this.value = '';
+    }
+  });
+
+  // Clear all
+  document.getElementById('clearAll').onclick = function(){
+    if(scans.length === 0) return;
+    if(confirm('¿Borrar todos los registros de esta sesión? Esta acción no se puede deshacer.')){
+      scans = [];
+      seen = {};
+      render();
+      persist();
+    }
+  };
+
+  // Export to Excel
+  document.getElementById('exportBtn').onclick = function(){
+    if(scans.length === 0){
+      alert('No hay códigos escaneados todavía.');
+      return;
+    }
+    var rows = scans.slice().reverse().map(function(s, i){
+      return {
+        '#': i+1,
+        'Código': s.code,
+        'Tipo': typeLabel(s.type),
+        'Duplicado': s.dup ? 'Sí' : 'No',
+        'Hora': s.time
+      };
+    });
+    var ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{wch:5},{wch:22},{wch:10},{wch:11},{wch:12}];
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Escaneo');
+    var stamp = new Date().toISOString().slice(0,16).replace('T','_').replace(':','h');
+    XLSX.writeFile(wb, 'escaneo_inventario_' + stamp + '.xlsx');
+  };
+
+  // Camera scanning
+  var startBtn = document.getElementById('startBtn');
+  var stopBtn = document.getElementById('stopBtn');
+
+  startBtn.onclick = async function(){
+    if(scanning) return;
+    camStatus.textContent = 'Activando cámara...';
+    camStatus.className = 'status';
+    try{
+      html5QrCode = new Html5Qrcode('reader');
+      var config = {
+        fps: 12,
+        qrbox: { width: 280, height: 140 },
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.QR_CODE
+        ]
+      };
+      await html5QrCode.start(
+        { facingMode: 'environment' },
+        config,
+        function onScanSuccess(decodedText){
+          addCode(decodedText, 'camera');
+          camStatus.textContent = 'Último código leído: ' + decodedText;
+          camStatus.className = 'status ok';
+        },
+        function onScanFailure(){ /* silencioso, ocurre en cada frame sin lectura */ }
+      );
+      scanning = true;
+      startBtn.style.display = 'none';
+      stopBtn.style.display = 'block';
+      camStatus.textContent = 'Cámara activa. Apunta al código.';
+    }catch(err){
+      camStatus.textContent = 'No se pudo acceder a la cámara. Revisa los permisos del navegador.';
+      camStatus.className = 'status err';
+      console.error(err);
+    }
+  };
+
+  stopBtn.onclick = async function(){
+    if(html5QrCode && scanning){
+      try{ await html5QrCode.stop(); html5QrCode.clear(); }catch(e){}
+      scanning = false;
+      startBtn.style.display = 'block';
+      stopBtn.style.display = 'none';
+      camStatus.textContent = 'Cámara detenida.';
+      camStatus.className = 'status';
+    }
+  };
+
+  loadStored();
+})();
+</script>
+
+</body>
+</html>
